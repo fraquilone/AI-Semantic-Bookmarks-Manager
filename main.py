@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from supabase import create_client, Client
 from openai import OpenAI
 import json
+import numpy
 
 # Initialize FastAPI
 app = FastAPI(title="Semantic Bookmark Manager API")
@@ -85,13 +86,21 @@ def generate_metadata_with_ai(text: str) -> BookmarkMetadata:
         raise HTTPException(status_code=500, detail=f"AI Metadata Generation failed: {str(e)}")
 
 def generate_embedding(text: str) -> list[float]:
-    """Generates a 2048-dimensional vector embedding for the given text."""
+    """Generates a 1536-dimensional vector embedding for the given text."""
     try:
         response = client.embeddings.create(
             model="nvidia/nemotron-3-embed-1b:free",
             input=text
         )
-        return response.data[0].embedding
+        full_embedding = np.array(response.data[0].embedding)
+        sliced_embedding = full_embedding[:1536]
+
+        # L2 Normalize using numpy
+        norm = np.linalg.norm(sliced_embedding)
+        normalized_embedding = (sliced_embedding / norm) if norm > 0 else sliced_embedding
+
+        return normalized_embedding.tolist()
+
     except Exception as e:
          raise HTTPException(status_code=500, detail=f"Embedding Generation failed: {str(e)}")
 
