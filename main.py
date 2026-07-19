@@ -11,8 +11,10 @@ import json
 app = FastAPI(title="Semantic Bookmark Manager API")
 
 # Initialize OpenAI
-# Assumes OPENAI_API_KEY is set in your environment
-client = OpenAI()
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1"
+    api_key="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"
+)
 
 # Initialize Supabase
 url: str = os.environ.get("SUPABASE_URL")
@@ -68,7 +70,7 @@ def generate_metadata_with_ai(text: str) -> BookmarkMetadata:
     
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="openrouter/free",
             response_format={ "type": "json_object" },
             messages=[
                 {"role": "system", "content": "You are a helpful assistant designed to output strict JSON."},
@@ -83,10 +85,10 @@ def generate_metadata_with_ai(text: str) -> BookmarkMetadata:
         raise HTTPException(status_code=500, detail=f"AI Metadata Generation failed: {str(e)}")
 
 def generate_embedding(text: str) -> list[float]:
-    """Generates a 1536-dimensional vector embedding for the given text."""
+    """Generates a 2048-dimensional vector embedding for the given text."""
     try:
         response = client.embeddings.create(
-            model="text-embedding-3-small",
+            model="nvidia/nemotron-3-embed-1b:free",
             input=text
         )
         return response.data[0].embedding
