@@ -11,9 +11,9 @@ import json
 app = FastAPI(title="Semantic Bookmark Manager API")
 
 # Initialize OpenAI
+# Assumes OPENAI_API_KEY is set in your environment
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1"
-    api_key="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"
 )
 
 # Initialize Supabase
