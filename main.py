@@ -68,7 +68,7 @@ def generate_metadata_with_ai(text: str) -> BookmarkMetadata:
     
     try:
         response = client.chat.completions.create(
-            model="google/gemma-7b-it:free", 
+            model="google/gemma-4-26b-a4b-it:free", 
             response_format={ "type": "json_object" },
             messages=[
                 {"role": "system", "content": "You are a helpful assistant designed to output strict JSON."},
