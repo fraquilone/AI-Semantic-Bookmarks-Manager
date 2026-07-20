@@ -102,7 +102,7 @@ def generate_embedding(text: str) -> list[float]:
     try:
         response = client.embeddings.create(
             model="nvidia/nemotron-3-embed-1b:free",
-            input=text
+            input=text,
             encoding_format="float" # FIXED: Overrides the SDK's hidden Base64 default
         )
         
