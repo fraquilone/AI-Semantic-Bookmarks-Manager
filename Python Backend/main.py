@@ -4,12 +4,22 @@ import requests
 import numpy as np
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client, Client
 from openai import OpenAI
 
 # Initialize FastAPI
 app = FastAPI(title="Semantic Bookmark Manager API")
+
+# MIDDLEWARE CONFIGURATION
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows requests from any extension or website
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows POST, GET, OPTIONS, etc.
+    allow_headers=["*"],
+)
 
 # Initialize OpenAI
 client = OpenAI(
