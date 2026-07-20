@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Semantic Bookmarks</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="header">
+        <h2>Semantic Bookmarks</h2>
+    </div>
+    
+    <div class="tabs">
+        <button class="tab-btn active" id="tab-save">Save Page</button>
+        <button class="tab-btn" id="tab-search">Search</button>
+    </div>
+
+    <!-- SAVE SECTION -->
+    <div id="section-save" class="section active">
+        <div class="input-group">
+            <label>Current URL</label>
+            <input type="text" id="current-url" readonly />
+        </div>
+        <button id="btn-save" class="primary-btn">Generate AI Bookmark</button>
+        <div id="save-status" class="status-message"></div>
+    </div>
+
+    <!-- SEARCH SECTION -->
+    <div id="section-search" class="section">
+        <div class="input-group">
+            <input type="text" id="search-query" placeholder="E.g., 'coding tutorials' or 'ai tools'" />
+        </div>
+        <div class="slider-group">
+            <label for="threshold-slider">Match Threshold: <span id="threshold-val">0.2</span></label>
+            <input type="range" id="threshold-slider" min="-1.0" max="1.0" step="0.1" value="0.2" />
+        </div>
+        <button id="btn-search" class="primary-btn">Search Semantic DB</button>
+        
+        <div id="search-status" class="status-message"></div>
+        <div id="search-results" class="results-container"></div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
