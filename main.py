@@ -34,6 +34,11 @@ class BookmarkMetadata(BaseModel):
     category: str
     tags: list[str]
 
+class SearchRequest(BaseModel):
+    query: str
+    match_threshold: float = 0.5  # Only return somewhat relevant results
+    match_count: int = 5
+
 # --- Helper Functions ---
 
 def scrape_website_text(url: str) -> str:
@@ -154,3 +159,31 @@ def add_bookmark(request: BookmarkRequest):
         return {"status": "success", "data": result.data[0]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database insertion failed: {str(e)}")
+
+@app.post("/search")
+def search_bookmarks(request: SearchRequest):
+    """
+    1. Embeds the user's search query
+    2. Calls the Supabase Postgres function to find similar vectors
+    """
+    print(f"Generating embedding for query: {request.query}")
+    
+    # Turn the search query into a vector using the exact same model
+    query_embedding = generate_embedding(request.query)
+    
+    print("Searching Supabase...")
+    try:
+        # Call your Postgres function via RPC
+        result = supabase.rpc(
+            "match_bookmarks",
+            {
+                "query_embedding": query_embedding,
+                "match_threshold": request.match_threshold,
+                "match_count": request.match_count
+            }
+        ).execute()
+        
+        return {"status": "success", "results": result.data}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database search failed: {str(e)}")
