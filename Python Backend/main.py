@@ -46,7 +46,7 @@ class BookmarkMetadata(BaseModel):
 
 class SearchRequest(BaseModel):
     query: str
-    match_threshold: float = 0.5  # Only return somewhat relevant results
+    match_threshold: float = 0.2  # Only return somewhat relevant results
     match_count: int = 5
 
 # --- Helper Functions ---
@@ -118,7 +118,7 @@ def generate_embedding(text: str) -> list[float]:
         response = client.embeddings.create(
             model="nvidia/nemotron-3-embed-1b:free",
             input=text,
-            encoding_format="float" # FIXED: Overrides the SDK's hidden Base64 default
+            encoding_format="float" # Overrides the SDK's hidden Base64 default
         )
         
         # Validate that data actually exists in the response
@@ -165,7 +165,7 @@ def add_bookmark(request: BookmarkRequest):
     }
     
     try:
-        result = supabase.table("bookmarks").insert(data_to_insert).execute()
+        result = supabase.table("bookmarks").upsert(data_to_insert, on_conflict="url").execute()
         return {"status": "success", "data": result.data[0]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database insertion failed: {str(e)}")
@@ -197,3 +197,53 @@ def search_bookmarks(request: SearchRequest):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database search failed: {str(e)}")
+
+
+@app.get("/bookmarks")
+def get_bookmarks(
+    limit: int = 10,
+    search: str = None,
+    sort_by: str = "created_at",
+    order: str = "desc"
+):
+    """
+    Fetches stored bookmarks with limit, sorting, and keyword searching across fields.
+    """
+    try:
+        desc_bool = True if order.lower() == "desc" else False
+        
+        # Fetch records excluding vectors to save bandwidth
+        query = supabase.table("bookmarks") \
+            .select("id, url, title, description, category, tags, created_at") \
+            .order(sort_by, desc=desc_bool) \
+            .limit(limit)
+            
+        result = query.execute()
+        bookmarks = result.data
+        
+        # Python-side filtering for search query across name, url, category, and tags
+        if search:
+            s = search.lower()
+            filtered = []
+            for b in bookmarks:
+                title_match = s in (b.get("title") or "").lower()
+                url_match = s in (b.get("url") or "").lower()
+                cat_match = s in (b.get("category") or "").lower()
+                tags_match = any(s in tag.lower() for tag in (b.get("tags") or []))
+                
+                if title_match or url_match or cat_match or tags_match:
+                    filtered.append(b)
+            bookmarks = filtered
+            
+        return {"status": "success", "data": bookmarks}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch bookmarks: {str(e)}")
+
+@app.delete("/bookmark/{bookmark_id}")
+def delete_bookmark(bookmark_id: str):
+    """Deletes a bookmark by its UUID."""
+    try:
+        supabase.table("bookmarks").delete().eq("id", bookmark_id).execute()
+        return {"status": "success", "message": f"Bookmark {bookmark_id} deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")

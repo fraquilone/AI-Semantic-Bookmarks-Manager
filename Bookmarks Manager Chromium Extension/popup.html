@@ -41,6 +41,26 @@
         <div id="search-results" class="results-container"></div>
     </div>
 
+    <!-- MANAGE SECTION -->
+    <div id="section-manage" class="section">
+        <div class="filter-controls">
+            <input type="text" id="manage-search" placeholder="Search title, URL, tag, category..." />
+            <div class="filter-row">
+                <label>Limit: 
+                    <input type="number" id="manage-limit" value="10" min="1" max="100" style="width: 50px;" />
+                </label>
+                <select id="manage-sort">
+                    <option value="created_at:desc">Newest First</option>
+                    <option value="created_at:asc">Oldest First</option>
+                    <option value="title:asc">Title (A-Z)</option>
+                </select>
+            </div>
+        </div>
+        
+        <div id="manage-status" class="status-message"></div>
+        <div id="manage-results" class="results-container"></div>
+    </div>
+
     <script src="popup.js"></script>
 </body>
 </html>
