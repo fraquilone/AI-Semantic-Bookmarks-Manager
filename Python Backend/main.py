@@ -144,6 +144,9 @@ def generate_embedding(text: str) -> list[float]:
 
 @app.post("/bookmark")
 def add_bookmark(request: BookmarkRequest):
+    # Cleaning the URL by removing trailing / if any
+    request.url = request.url.rstrip("/")
+    
     print(f"Scraping: {request.url}...")
     page_text = scrape_website_text(request.url)
     
@@ -243,6 +246,10 @@ def get_bookmarks(
 @app.get("/bookmark/check")
 def check_bookmark(url: str):
     """Checks if a URL already exists in the Supabase database."""
+
+    # Cleaning the URL by removing trailing / if any
+    url = url.rstrip("/")
+
     try:
         result = supabase.table("bookmarks") \
             .select("id, url, title, description, category, tags, created_at") \
