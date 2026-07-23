@@ -119,22 +119,10 @@ def generate_embedding(text: str) -> list[float]:
             model="nvidia/nemotron-3-embed-1b:free",
             input=text,
             encoding_format="float" # Overrides the SDK's hidden Base64 default
+            dimensions=1536 # Natively forces the API to return 1536 dimensions
         )
-        
-        # Validate that data actually exists in the response
-        if not hasattr(response, 'data') or len(response.data) == 0:
-            raise ValueError(f"OpenRouter returned empty data. Raw response: {response}")
 
-        full_embedding = np.array(response.data[0].embedding)
-        
-        # Slicing to 1536 (Note: ensure Nemotron actually outputs >= 1536 dims!)
-        sliced_embedding = full_embedding[:1536] 
-
-        # L2 Normalize using numpy
-        norm = np.linalg.norm(sliced_embedding)
-        normalized_embedding = (sliced_embedding / norm) if norm > 0 else sliced_embedding
-
-        return normalized_embedding.tolist()
+        return response.data[0].embedding
 
     except Exception as e:
          raise HTTPException(status_code=500, detail=f"Embedding Generation failed: {str(e)}")
@@ -213,32 +201,30 @@ def get_bookmarks(
     Fetches stored bookmarks with limit, sorting, and keyword searching across fields.
     """
     try:
-        desc_bool = True if order.lower() == "desc" else False
+        desc_bool = order.lower() == "desc"
         
-        # Fetch records excluding vectors to save bandwidth
-        query = supabase.table("bookmarks") \
-            .select("id, url, title, description, category, tags, created_at") \
-            .order(sort_by, desc=desc_bool) \
-            .limit(limit)
-            
-        result = query.execute()
-        bookmarks = result.data
+        # Initialize the base query (excluding vectors to save bandwidth)
+        query = supabase.table("bookmarks").select("id, url, title, description, category, tags, created_at")
         
-        # Python-side filtering for search query across name, url, category, and tags
+        # Apply database-level search BEFORE limiting the results
         if search:
-            s = search.lower()
-            filtered = []
-            for b in bookmarks:
-                title_match = s in (b.get("title") or "").lower()
-                url_match = s in (b.get("url") or "").lower()
-                cat_match = s in (b.get("category") or "").lower()
-                tags_match = any(s in tag.lower() for tag in (b.get("tags") or []))
-                
-                if title_match or url_match or cat_match or tags_match:
-                    filtered.append(b)
-            bookmarks = filtered
+            # Wrap the search term in wildcards for partial matching
+            pattern = f"%{search}%"
             
-        return {"status": "success", "data": bookmarks}
+            # Construct the PostgREST OR string.
+            or_filter = (
+                f"title.ilike.{pattern},"
+                f"url.ilike.{pattern},"
+                f"category.ilike.{pattern},"
+                f"description.ilike.{pattern}"
+            )
+            
+            query = query.or_(or_filter)
+            
+        # Finally, apply ordering, limiting, and execute the query
+        result = query.order(sort_by, desc=desc_bool).limit(limit).execute()
+        
+        return {"status": "success", "data": result.data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch bookmarks: {str(e)}")
 
