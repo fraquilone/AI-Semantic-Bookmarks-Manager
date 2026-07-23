@@ -1,5 +1,4 @@
 // --- CONFIGURATION ---
-// Replace this with your actual Render URL
 const API_BASE_URL = "https://YOUR-APP-NAME.onrender.com";
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -15,14 +14,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         manage: document.getElementById("section-manage")
     };
 
-    // Save UI
+    // Save Section Elements
     const urlInput = document.getElementById("current-url");
+    const saveStatus = document.getElementById("save-status");
+    const existingContainer = document.getElementById("existing-container");
+    const existingCard = document.getElementById("existing-card");
+    const newContainer = document.getElementById("new-container");
     const btnSave = document.getElementById("btn-save");
     const btnRegen = document.getElementById("btn-regen");
-    const saveStatus = document.getElementById("save-status");
-    const savePreview = document.getElementById("save-preview");
+    const btnDeleteSave = document.getElementById("btn-delete-save");
 
-    // Search UI
+    // Search Section Elements
     const searchInput = document.getElementById("search-query");
     const thresholdSlider = document.getElementById("threshold-slider");
     const thresholdVal = document.getElementById("threshold-val");
@@ -30,45 +32,100 @@ document.addEventListener("DOMContentLoaded", async () => {
     const searchStatus = document.getElementById("search-status");
     const searchResults = document.getElementById("search-results");
 
-    // Manage UI
+    // Manage Section Elements
     const manageSearch = document.getElementById("manage-search");
     const manageLimit = document.getElementById("manage-limit");
     const manageSort = document.getElementById("manage-sort");
     const manageStatus = document.getElementById("manage-status");
     const manageResults = document.getElementById("manage-results");
 
+    let activeBookmarkId = null; // Stores ID if current page exists in DB
+
     // --- Tab Switching ---
     function switchTab(target) {
         Object.keys(tabs).forEach(key => {
-            if (key === target) {
-                tabs[key].classList.add("active");
-                sections[key].classList.add("active");
-            } else {
-                tabs[key].classList.remove("active");
-                sections[key].classList.remove("active");
+            if (tabs[key] && sections[key]) {
+                if (key === target) {
+                    tabs[key].classList.add("active");
+                    sections[key].classList.add("active");
+                } else {
+                    tabs[key].classList.remove("active");
+                    sections[key].classList.remove("active");
+                }
             }
         });
-        if (target === "manage") fetchManageBookmarks();
+        if (target === "manage" && typeof fetchManageBookmarks === "function") {
+            fetchManageBookmarks();
+        }
     }
 
-    tabs.save.addEventListener("click", () => switchTab("save"));
-    tabs.search.addEventListener("click", () => switchTab("search"));
-    tabs.manage.addEventListener("click", () => switchTab("manage"));
+    tabs.save?.addEventListener("click", () => switchTab("save"));
+    tabs.search?.addEventListener("click", () => switchTab("search"));
+    tabs.manage?.addEventListener("click", () => switchTab("manage"));
 
-    // --- Auto-fill Current URL ---
-    try {
-        let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab && tab.url) urlInput.value = tab.url;
-    } catch (e) {
-        urlInput.value = "Unable to get URL";
-    }
-
-    // --- Threshold Slider (0.01 precision) ---
-    thresholdSlider.addEventListener("input", (e) => {
+    // --- Threshold Slider (0.01 Precision) ---
+    thresholdSlider?.addEventListener("input", (e) => {
         thresholdVal.textContent = parseFloat(e.target.value).toFixed(2);
     });
 
-    // --- Save & Regenerate Bookmark ---
+    // --- Startup Check for Current Tab ---
+    async function initSaveTab() {
+        try {
+            let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tab && tab.url && tab.url.startsWith("http")) {
+                urlInput.value = tab.url;
+                await checkExistingBookmark(tab.url);
+            } else {
+                urlInput.value = tab?.url || "Unable to get URL";
+                showStatus(saveStatus, "Cannot bookmark non-web pages.", "error");
+            }
+        } catch (e) {
+            urlInput.value = "Unable to get URL";
+            showStatus(saveStatus, `Error: ${e.message}`, "error");
+        }
+    }
+
+    // --- Query Backend for Existing URL ---
+    async function checkExistingBookmark(url) {
+        showStatus(saveStatus, "Checking database...", "loading");
+        try {
+            const res = await fetch(`${API_BASE_URL}/bookmark/check?url=${encodeURIComponent(url)}`);
+            const data = await res.json();
+
+            if (res.ok && data.exists) {
+                showStatus(saveStatus, "Bookmark already saved!", "success");
+                activeBookmarkId = data.data.id;
+                renderExistingCard(data.data);
+                existingContainer.classList.remove("hidden");
+                newContainer.classList.add("hidden");
+            } else {
+                showStatus(saveStatus, "", ""); // Clear status
+                activeBookmarkId = null;
+                existingContainer.classList.add("hidden");
+                newContainer.classList.remove("hidden");
+            }
+        } catch (err) {
+            showStatus(saveStatus, "Failed to connect to backend.", "error");
+            newContainer.classList.remove("hidden");
+        }
+    }
+
+    function renderExistingCard(b) {
+        const tagsHtml = (b.tags || []).map(t => `<span class="tag">${t}</span>`).join("");
+        existingCard.innerHTML = `
+            <div class="result-card">
+                <p class="result-title">${b.title || 'Untitled'}</p>
+                <a href="${b.url}" class="result-url" target="_blank">${b.url}</a>
+                <p class="result-desc">${b.description || 'No description available.'}</p>
+                <div style="margin-bottom: 6px;">${tagsHtml}</div>
+                <div class="result-meta">
+                    <span>Category: ${b.category || 'N/A'}</span>
+                </div>
+            </div>
+        `;
+    }
+
+    // --- Save / Regenerate Bookmark ---
     async function processBookmark() {
         const url = urlInput.value;
         if (!url || !url.startsWith("http")) {
@@ -78,8 +135,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         btnSave.disabled = true;
         btnRegen.disabled = true;
-        savePreview.innerHTML = "";
-        showStatus(saveStatus, "Scraping & generating AI metadata...", "loading");
+        showStatus(saveStatus, "Scraping page & generating AI embeddings...", "loading");
 
         try {
             const response = await fetch(`${API_BASE_URL}/bookmark`, {
@@ -91,9 +147,11 @@ document.addEventListener("DOMContentLoaded", async () => {
             const data = await response.json();
             
             if (response.ok) {
-                showStatus(saveStatus, "Bookmark saved successfully!", "success");
-                btnRegen.classList.remove("hidden"); // Show regenerate option
-                renderPreview(data.data);
+                showStatus(saveStatus, "Successfully updated bookmark!", "success");
+                activeBookmarkId = data.data.id;
+                renderExistingCard(data.data);
+                existingContainer.classList.remove("hidden");
+                newContainer.classList.add("hidden");
             } else {
                 showStatus(saveStatus, `Error: ${data.detail || 'Unknown error'}`, "error");
             }
@@ -108,28 +166,38 @@ document.addEventListener("DOMContentLoaded", async () => {
     btnSave.addEventListener("click", processBookmark);
     btnRegen.addEventListener("click", processBookmark);
 
-    function renderPreview(bookmark) {
-        const tagsHtml = (bookmark.tags || []).map(t => `<span class="tag">${t}</span>`).join("");
-        savePreview.innerHTML = `
-            <div class="result-card">
-                <p class="result-title">${bookmark.title || 'Untitled'}</p>
-                <a href="${bookmark.url}" class="result-url" target="_blank">${bookmark.url}</a>
-                <p class="result-desc">${bookmark.description || ''}</p>
-                <div style="margin-bottom: 6px;">${tagsHtml}</div>
-                <div class="result-meta">
-                    <span>Category: ${bookmark.category || 'N/A'}</span>
-                </div>
-            </div>
-        `;
-    }
+    // --- Delete Bookmark from Save View ---
+    btnDeleteSave.addEventListener("click", async () => {
+        if (!activeBookmarkId) return;
+        if (!confirm("Are you sure you want to delete this bookmark?")) return;
 
-    // --- Semantic Search ---
-    btnSearch.addEventListener("click", async () => {
+        btnDeleteSave.disabled = true;
+        showStatus(saveStatus, "Deleting bookmark...", "loading");
+
+        try {
+            const res = await fetch(`${API_BASE_URL}/bookmark/${activeBookmarkId}`, { method: "DELETE" });
+            if (res.ok) {
+                showStatus(saveStatus, "Bookmark deleted.", "success");
+                activeBookmarkId = null;
+                existingContainer.classList.add("hidden");
+                newContainer.classList.remove("hidden");
+            } else {
+                showStatus(saveStatus, "Failed to delete bookmark.", "error");
+            }
+        } catch (err) {
+            showStatus(saveStatus, `Error: ${err.message}`, "error");
+        } finally {
+            btnDeleteSave.disabled = false;
+        }
+    });
+
+    // --- Search Tab Handler ---
+    btnSearch?.addEventListener("click", async () => {
         const query = searchInput.value.trim();
         const threshold = parseFloat(thresholdSlider.value);
         
         if (!query) {
-            showStatus(searchStatus, "Please enter a search term.", "error");
+            showStatus(searchStatus, "Please enter a search query.", "error");
             return;
         }
 
@@ -152,7 +220,22 @@ document.addEventListener("DOMContentLoaded", async () => {
             
             if (response.ok && data.results.length > 0) {
                 showStatus(searchStatus, `Found ${data.results.length} matches.`, "success");
-                renderSearchResults(data.results);
+                data.results.forEach(res => {
+                    const card = document.createElement("div");
+                    card.className = "result-card";
+                    const tagsHtml = (res.tags || []).map(t => `<span class="tag">${t}</span>`).join("");
+                    card.innerHTML = `
+                        <p class="result-title">${res.title || 'Untitled'}</p>
+                        <a href="${res.url}" class="result-url" target="_blank">${res.url}</a>
+                        <p class="result-desc">${res.description || ''}</p>
+                        <div style="margin-bottom: 6px;">${tagsHtml}</div>
+                        <div class="result-meta">
+                            <span>${res.category || ''}</span>
+                            <span>Score: ${res.similarity.toFixed(2)}</span>
+                        </div>
+                    `;
+                    searchResults.appendChild(card);
+                });
             } else if (response.ok) {
                 showStatus(searchStatus, "No results found. Try lowering threshold.", "error");
             } else {
@@ -165,27 +248,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     });
 
-    function renderSearchResults(results) {
-        results.forEach(res => {
-            const card = document.createElement("div");
-            card.className = "result-card";
-            const tagsHtml = (res.tags || []).map(t => `<span class="tag">${t}</span>`).join("");
-            
-            card.innerHTML = `
-                <p class="result-title">${res.title || 'Untitled'}</p>
-                <a href="${res.url}" class="result-url" target="_blank">${res.url}</a>
-                <p class="result-desc">${res.description || ''}</p>
-                <div style="margin-bottom: 6px;">${tagsHtml}</div>
-                <div class="result-meta">
-                    <span>${res.category || ''}</span>
-                    <span>Score: ${res.similarity.toFixed(2)}</span>
-                </div>
-            `;
-            searchResults.appendChild(card);
-        });
-    }
-
-    // --- Manage Bookmarks (View, Filter, Sort, Delete) ---
+    // --- Manage Tab Handler ---
     async function fetchManageBookmarks() {
         const limit = manageLimit.value || 10;
         const search = manageSearch.value.trim();
@@ -203,7 +266,36 @@ document.addEventListener("DOMContentLoaded", async () => {
 
             if (response.ok && data.data.length > 0) {
                 showStatus(manageStatus, `Showing ${data.data.length} bookmarks.`, "success");
-                renderManageList(data.data);
+                data.data.forEach(b => {
+                    const card = document.createElement("div");
+                    card.className = "result-card";
+                    const tagsHtml = (b.tags || []).map(t => `<span class="tag">${t}</span>`).join("");
+
+                    card.innerHTML = `
+                        <button class="delete-btn" data-id="${b.id}">✕</button>
+                        <p class="result-title">${b.title || 'Untitled'}</p>
+                        <a href="${b.url}" class="result-url" target="_blank">${b.url}</a>
+                        <p class="result-desc">${b.description || ''}</p>
+                        <div style="margin-bottom: 6px;">${tagsHtml}</div>
+                        <div class="result-meta">
+                            <span>${b.category || 'Uncategorized'}</span>
+                        </div>
+                    `;
+
+                    card.querySelector(".delete-btn").addEventListener("click", async (e) => {
+                        const id = e.target.getAttribute("data-id");
+                        if (confirm("Delete this bookmark?")) {
+                            await fetch(`${API_BASE_URL}/bookmark/${id}`, { method: "DELETE" });
+                            card.remove();
+                            // If we deleted the current active page bookmark, update save tab
+                            if (id === activeBookmarkId) {
+                                initSaveTab();
+                            }
+                        }
+                    });
+
+                    manageResults.appendChild(card);
+                });
             } else if (response.ok) {
                 showStatus(manageStatus, "No bookmarks found.", "error");
             } else {
@@ -214,55 +306,10 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
 
-    // Debounced listeners for filtering/sorting
-    manageSearch.addEventListener("input", debounce(fetchManageBookmarks, 300));
-    manageLimit.addEventListener("change", fetchManageBookmarks);
-    manageSort.addEventListener("change", fetchManageBookmarks);
+    manageSearch?.addEventListener("input", debounce(fetchManageBookmarks, 300));
+    manageLimit?.addEventListener("change", fetchManageBookmarks);
+    manageSort?.addEventListener("change", fetchManageBookmarks);
 
-    function renderManageList(bookmarks) {
-        bookmarks.forEach(b => {
-            const card = document.createElement("div");
-            card.className = "result-card";
-            const tagsHtml = (b.tags || []).map(t => `<span class="tag">${t}</span>`).join("");
-
-            card.innerHTML = `
-                <button class="delete-btn" data-id="${b.id}">✕</button>
-                <p class="result-title">${b.title || 'Untitled'}</p>
-                <a href="${b.url}" class="result-url" target="_blank">${b.url}</a>
-                <p class="result-desc">${b.description || ''}</p>
-                <div style="margin-bottom: 6px;">${tagsHtml}</div>
-                <div class="result-meta">
-                    <span>${b.category || 'Uncategorized'}</span>
-                </div>
-            `;
-
-            // Attach Delete Event Listener
-            card.querySelector(".delete-btn").addEventListener("click", async (e) => {
-                const id = e.target.getAttribute("data-id");
-                if (confirm("Are you sure you want to delete this bookmark?")) {
-                    await deleteBookmark(id, card);
-                }
-            });
-
-            manageResults.appendChild(card);
-        });
-    }
-
-    async function deleteBookmark(id, cardElement) {
-        try {
-            const response = await fetch(`${API_BASE_URL}/bookmark/${id}`, { method: "DELETE" });
-            if (response.ok) {
-                cardElement.remove();
-                showStatus(manageStatus, "Bookmark deleted.", "success");
-            } else {
-                alert("Failed to delete bookmark.");
-            }
-        } catch (err) {
-            alert(`Error deleting: ${err.message}`);
-        }
-    }
-
-    // Helper: Debounce function for live search input
     function debounce(func, delay) {
         let timer;
         return (...args) => {
@@ -272,7 +319,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     function showStatus(element, message, type) {
+        if (!element) return;
         element.textContent = message;
         element.className = `status-message ${type}`;
     }
+
+    // Run tab initialization on load
+    initSaveTab();
 });

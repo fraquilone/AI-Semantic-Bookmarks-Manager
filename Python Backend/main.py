@@ -239,6 +239,23 @@ def get_bookmarks(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch bookmarks: {str(e)}")
 
+
+@app.get("/bookmark/check")
+def check_bookmark(url: str):
+    """Checks if a URL already exists in the Supabase database."""
+    try:
+        result = supabase.table("bookmarks") \
+            .select("id, url, title, description, category, tags, created_at") \
+            .eq("url", url) \
+            .execute()
+            
+        if result.data:
+            return {"exists": True, "data": result.data[0]}
+        return {"exists": False, "data": None}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Check failed: {str(e)}")
+
+
 @app.delete("/bookmark/{bookmark_id}")
 def delete_bookmark(bookmark_id: str):
     """Deletes a bookmark by its UUID."""

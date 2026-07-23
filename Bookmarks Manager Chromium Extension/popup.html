@@ -23,14 +23,22 @@
             <label>Current URL</label>
             <input type="text" id="current-url" readonly />
         </div>
-        
-        <div class="btn-group">
-            <button id="btn-save" class="primary-btn">Generate AI Bookmark</button>
-            <button id="btn-regen" class="secondary-btn hidden">🔄 Regenerate</button>
-        </div>
-        
+    
         <div id="save-status" class="status-message"></div>
-        <div id="save-preview" class="results-container"></div>
+    
+        <!-- EXISTING BOOKMARK VIEW -->
+        <div id="existing-container" class="hidden">
+            <div id="existing-card"></div>
+            <div class="btn-group" style="margin-top: 10px;">
+                <button id="btn-regen" class="secondary-btn">🔄 Regenerate</button>
+                <button id="btn-delete-save" class="danger-btn">🗑️ Delete</button>
+            </div>
+        </div>
+    
+        <!-- NEW BOOKMARK VIEW -->
+        <div id="new-container" class="hidden">
+            <button id="btn-save" class="primary-btn">Generate AI Bookmark</button>
+        </div>
     </div>
 
     <!-- SEARCH SECTION -->

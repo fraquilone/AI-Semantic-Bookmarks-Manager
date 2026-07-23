@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Semantic Bookmark Manager",
+  "name": "AI Semantic Bookmarks Manager",
   "version": "1.0",
   "description": "Save and semantically search your bookmarks using AI.",
   "permissions": [
