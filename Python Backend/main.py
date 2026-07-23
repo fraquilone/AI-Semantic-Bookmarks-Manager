@@ -118,7 +118,7 @@ def generate_embedding(text: str) -> list[float]:
         response = client.embeddings.create(
             model="nvidia/nemotron-3-embed-1b:free",
             input=text,
-            encoding_format="float" # Overrides the SDK's hidden Base64 default
+            encoding_format="float", # Overrides the SDK's hidden Base64 default
             dimensions=1536 # Natively forces the API to return 1536 dimensions
         )
 
